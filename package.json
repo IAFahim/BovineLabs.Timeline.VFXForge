@@ -1,0 +1,14 @@
+{
+  "name": "com.bovinelabs.timeline.vfxforge",
+  "displayName": "BovineLabs Timeline VFX Forge",
+  "version": "0.1.0",
+  "unity": "6000.6",
+  "unityRelease": "0a3",
+  "description": "A BovineLabs DOTS Timeline track that plays Fire Alt VFX Forge effects.\n\nThe Play VFX track spawns a fresh Fire Alt persistent VFX instance on a clip's start edge and kills it on the clip's end, so every activation plays from the start (no stale/finished particle state), the whole composite graph is one spawn, and the instance follows a resolved target entity (Owner/Source/Target/Self or a linked enemy) for the clip's duration.",
+  "dependencies": {
+    "com.unity.test-framework": "1.6.0"
+  },
+  "author": {
+    "name": "vex"
+  }
+}

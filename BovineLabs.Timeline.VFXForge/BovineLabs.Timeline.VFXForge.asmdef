@@ -1,0 +1,31 @@
+{
+  "name": "BovineLabs.Timeline.VFXForge",
+  "rootNamespace": "",
+  "references": [
+    "BovineLabs.Core",
+    "BovineLabs.Core.Extensions",
+    "BovineLabs.Timeline.VFXForge.Data",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "Unity.Transforms",
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Timeline",
+    "BovineLabs.Timeline.Data",
+    "BovineLabs.Timeline.EntityLinks",
+    "BovineLabs.Timeline.EntityLinks.Data",
+    "FireAlt.VFXForge",
+    "FireAlt.VFXForge.Data"
+  ],
+  "optionalUnityReferences": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
