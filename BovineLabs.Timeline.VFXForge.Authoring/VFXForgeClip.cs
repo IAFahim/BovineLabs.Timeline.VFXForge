@@ -52,6 +52,17 @@ namespace BovineLabs.Timeline.VFXForge.Authoring
                     this);
             }
 
+            // Key 0 = the FireAlt UID postprocessor hasn't stamped this definition yet; ContainsPersistent(0) is
+            // false at runtime so the clip silently plays nothing. Tell the designer to re-import/save the definition.
+            if (((FireAlt.VFXForge.Data.VFXKey)this.definition).Value == 0)
+            {
+                Debug.LogWarning(
+                    $"VFXForgeClip '{this.name}' references VFXDefinition '{this.definition.name}' whose VFXKey is 0 " +
+                    "(unregistered); it will play nothing at runtime. Re-import/save the definition so the FireAlt UID " +
+                    "postprocessor assigns it a key.",
+                    this);
+            }
+
             EntityLinkAuthoringUtility.TryGetKey(this.routeLink, out var linkKey);
             context.Baker.DependsOn(this.definition);
 
