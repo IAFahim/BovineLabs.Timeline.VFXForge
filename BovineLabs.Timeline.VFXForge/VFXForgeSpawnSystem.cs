@@ -40,7 +40,10 @@ namespace BovineLabs.Timeline.VFXForge
             this.linkLookup = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
 
             state.RequireForUpdate<VFXSingleton>();
-            state.RequireForUpdate<VFXForgeClipData>();
+
+            // NOTE: intentionally NOT RequireForUpdate<VFXForgeClipData> — the reaper must still run after the last
+            // clip entity is destroyed (only cleanup shadows remain) to free their orphaned persistent instances.
+            // Spawn/Kill jobs over empty queries are near-free no-ops when no clips are active.
         }
 
         /// <inheritdoc/>
@@ -52,6 +55,8 @@ namespace BovineLabs.Timeline.VFXForge
             this.linkLookup.Update(ref state);
 
             var vfx = SystemAPI.GetSingletonRW<VFXSingleton>().ValueRW.AsParallelWriter();
+            var ecb = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged);
 
             // Spawn allocates instance indices off the entry, so keep it single-threaded (mirrors the decal InitJob).
             state.Dependency = new SpawnJob
@@ -60,9 +65,14 @@ namespace BovineLabs.Timeline.VFXForge
                 TargetsLookup = this.targetsLookup,
                 LinkSources = this.linkSourceLookup,
                 Links = this.linkLookup,
+                Ecb = ecb,
             }.Schedule(state.Dependency);
 
-            state.Dependency = new KillJob { Vfx = vfx }.Schedule(state.Dependency);
+            state.Dependency = new KillJob { Vfx = vfx, Ecb = ecb }.Schedule(state.Dependency);
+
+            // Reap orphans: a destroyed clip entity leaves only the cleanup shadow (ICleanupComponentData survives
+            // destruction). Kill its persistent instance and remove the shadow so the entity is finally freed.
+            state.Dependency = new ReapJob { Vfx = vfx, Ecb = ecb }.Schedule(state.Dependency);
         }
 
         [BurstCompile]
@@ -80,7 +90,10 @@ namespace BovineLabs.Timeline.VFXForge
             [ReadOnly]
             public UnsafeBufferLookup<EntityLinkEntry> Links;
 
+            public EntityCommandBuffer Ecb;
+
             private void Execute(
+                Entity entity,
                 in TrackBinding binding,
                 in VFXForgeClipData data,
                 ref VFXForgeRuntimeState rt)
@@ -116,6 +129,10 @@ namespace BovineLabs.Timeline.VFXForge
 
                 // trackingDuration 0 = lifetime fully controlled by the clip (killed on the end edge below).
                 rt.Tracked = this.Vfx.GetPersistent(data.Key).Spawn(target, 0f);
+
+                // Destruction-surviving shadow so the instance is reaped even if the clip entity is destroyed
+                // mid-active. Carries the Key because VFXForgeClipData is gone once the entity dies.
+                this.Ecb.AddComponent(entity, new VFXForgeCleanup { Key = data.Key, Tracked = rt.Tracked });
             }
         }
 
@@ -124,8 +141,9 @@ namespace BovineLabs.Timeline.VFXForge
         private partial struct KillJob : IJobEntity
         {
             public VFXSingleton.ParallelWriter Vfx;
+            public EntityCommandBuffer Ecb;
 
-            private void Execute(in VFXForgeClipData data, ref VFXForgeRuntimeState rt)
+            private void Execute(Entity entity, in VFXForgeClipData data, ref VFXForgeRuntimeState rt)
             {
                 if (rt.Tracked.Equals(TrackedEntity.Null))
                 {
@@ -138,6 +156,29 @@ namespace BovineLabs.Timeline.VFXForge
                 }
 
                 rt.Tracked = TrackedEntity.Null;
+
+                // Normal end: instance killed, so drop the destruction-surviving shadow.
+                this.Ecb.RemoveComponent<VFXForgeCleanup>(entity);
+            }
+        }
+
+        // Reaps orphaned instances: the clip entity was destroyed while active, leaving only the cleanup shadow
+        // (VFXForgeRuntimeState/VFXForgeClipData are gone). Kill the persistent instance and remove the shadow.
+        [BurstCompile]
+        [WithNone(typeof(VFXForgeRuntimeState))]
+        private partial struct ReapJob : IJobEntity
+        {
+            public VFXSingleton.ParallelWriter Vfx;
+            public EntityCommandBuffer Ecb;
+
+            private void Execute(Entity entity, in VFXForgeCleanup cleanup)
+            {
+                if (!cleanup.Tracked.Equals(TrackedEntity.Null) && this.Vfx.ContainsPersistent(cleanup.Key))
+                {
+                    this.Vfx.GetPersistent(cleanup.Key).TryKill(cleanup.Tracked);
+                }
+
+                this.Ecb.RemoveComponent<VFXForgeCleanup>(entity);
             }
         }
     }

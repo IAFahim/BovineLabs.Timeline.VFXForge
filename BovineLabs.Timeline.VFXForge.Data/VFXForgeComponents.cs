@@ -28,4 +28,17 @@ namespace BovineLabs.Timeline.VFXForge.Data
     {
         public TrackedEntity Tracked;
     }
+
+    /// <summary>
+    /// Destruction-surviving mirror of the spawned persistent instance. Added when <see cref="VFXForgeRuntimeState"/>
+    /// spawns, removed when the clip kills it normally. If the clip entity is destroyed mid-active (SubScene unload /
+    /// world teardown) the plain components vanish but this cleanup component survives, so a reaper can still kill the
+    /// orphaned Fire Alt persistent instance and free its fixed-capacity slot. Carries the Key because
+    /// <see cref="VFXForgeClipData"/> is gone once the entity dies.
+    /// </summary>
+    public struct VFXForgeCleanup : ICleanupComponentData
+    {
+        public VFXKey Key;
+        public TrackedEntity Tracked;
+    }
 }
