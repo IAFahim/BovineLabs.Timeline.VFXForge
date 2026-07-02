@@ -67,7 +67,6 @@ namespace BovineLabs.Timeline.VFXForge
 
         [BurstCompile]
         [WithAll(typeof(ClipActive))]
-        [WithPresent(typeof(ClipActivePrevious))]
         private partial struct SpawnJob : IJobEntity
         {
             public VFXSingleton.ParallelWriter Vfx;
@@ -84,16 +83,12 @@ namespace BovineLabs.Timeline.VFXForge
             private void Execute(
                 in TrackBinding binding,
                 in VFXForgeClipData data,
-                ref VFXForgeRuntimeState rt,
-                EnabledRefRO<ClipActivePrevious> clipActivePrevious)
+                ref VFXForgeRuntimeState rt)
             {
-                // Rising edge only: active this frame, inactive last frame.
-                if (clipActivePrevious.ValueRO)
-                {
-                    return;
-                }
-
-                // Already have a live instance for this activation (defensive against double-fire).
+                // Retry the spawn every active frame until it succeeds, instead of only on the rising edge —
+                // a one-frame resolution miss (binding/key/link not ready) no longer silently kills the whole
+                // clip. The rt.Tracked guard below self-latches after the first success (KillJob clears it on
+                // deactivation, so re-activations spawn fresh).
                 if (!rt.Tracked.Equals(TrackedEntity.Null))
                 {
                     return;
