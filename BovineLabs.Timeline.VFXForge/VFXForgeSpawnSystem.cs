@@ -101,8 +101,9 @@ namespace BovineLabs.Timeline.VFXForge
                 // Retry the spawn every active frame until it succeeds, instead of only on the rising edge —
                 // a one-frame resolution miss (binding/key/link not ready) no longer silently kills the whole
                 // clip. The rt.Tracked guard below self-latches after the first success (KillJob clears it on
-                // deactivation, so re-activations spawn fresh).
-                if (!rt.Tracked.Equals(TrackedEntity.Null))
+                // deactivation, so re-activations spawn fresh). Gate on IsValid, not !=Null: on pool exhaustion
+                // Spawn returns an invalid-but-non-Null handle that must NOT be treated as a live instance.
+                if (rt.Tracked.IsValid)
                 {
                     return;
                 }
@@ -128,7 +129,13 @@ namespace BovineLabs.Timeline.VFXForge
                 }
 
                 // trackingDuration 0 = lifetime fully controlled by the clip (killed on the end edge below).
-                rt.Tracked = this.Vfx.GetPersistent(data.Key).Spawn(target, 0f);
+                var spawned = this.Vfx.GetPersistent(data.Key).Spawn(target, 0f);
+                if (!spawned.IsValid)
+                {
+                    return; // pool exhausted — leave rt.Tracked unset so we retry next frame (no invalid latch/shadow)
+                }
+
+                rt.Tracked = spawned;
 
                 // Destruction-surviving shadow so the instance is reaped even if the clip entity is destroyed
                 // mid-active. Carries the Key because VFXForgeClipData is gone once the entity dies.
