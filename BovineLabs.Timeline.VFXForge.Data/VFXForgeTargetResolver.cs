@@ -17,59 +17,16 @@ namespace BovineLabs.Timeline.VFXForge.Data
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool TryResolveLinkedTarget(
-            Target targetMode,
-            ushort linkKey,
+            in EntityLinkRef route,
             Entity self,
             in UnsafeComponentLookup<Targets> targetsLookup,
             in UnsafeComponentLookup<EntityLinkSource> sources,
             in UnsafeBufferLookup<EntityLinkEntry> links,
             out Entity resolved)
         {
-            resolved = Entity.Null;
-
-            if (!TryResolveTarget(targetMode, self, targetsLookup, out var target))
-            {
-                return false;
-            }
-
-            if (linkKey == 0)
-            {
-                resolved = target;
-                return true;
-            }
-
-            if (EntityLinkResolver.TryResolve(target, linkKey, sources, links, out var linked) && linked != Entity.Null)
-            {
-                resolved = linked;
-                return true;
-            }
-
-            // Link key present but unresolved: fall back to the base target rather than firing nowhere.
-            resolved = target;
-            return true;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool TryResolveTarget(
-            Target target,
-            Entity binding,
-            in UnsafeComponentLookup<Targets> targets,
-            out Entity resolved)
-        {
-            if (target is Target.Self or Target.None)
-            {
-                resolved = binding;
-                return true;
-            }
-
-            if (targets.TryGetComponent(binding, out var t))
-            {
-                resolved = t.Get(target, binding);
-                return resolved != Entity.Null;
-            }
-
-            resolved = Entity.Null;
-            return false;
+            // Targets is optional on the bound entity: Self/None slots resolve to self regardless; other slots need it.
+            targetsLookup.TryGetComponent(self, out var targets);
+            return route.TryResolve(self, targets, sources, links, out resolved);
         }
     }
 }

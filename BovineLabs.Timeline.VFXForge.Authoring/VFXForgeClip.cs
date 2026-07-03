@@ -17,14 +17,14 @@ namespace BovineLabs.Timeline.VFXForge.Authoring
     /// </summary>
     public sealed class VFXForgeClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Optional EntityLink schema; re-routes from the resolved target to a linked entity (e.g. a specific enemy). Leave empty to use the route target directly.")]
+        public EntityLinkSchema routeLink;
+
         [Tooltip("The Fire Alt VFX to play. Must be a PERSISTENT VFXDefinition: it is spawned on the clip start and killed on the clip end. A HybridVisualEffect for this definition must exist in the loaded scene/subscene so its VFXKey is registered.")]
         public VFXDefinition definition;
 
         [Tooltip("Which entity the VFX plays at / follows, relative to the track's bound entity: Owner, Source, Target, or Self (the bound entity itself).")]
         public Target routeTo = Target.Self;
-
-        [Tooltip("Optional EntityLink schema; re-routes from the resolved target to a linked entity (e.g. a specific enemy). Leave empty to use the route target directly.")]
-        public EntityLinkSchema routeLink;
 
         /// <inheritdoc/>
         public override double duration => 1;
@@ -63,14 +63,12 @@ namespace BovineLabs.Timeline.VFXForge.Authoring
                     this);
             }
 
-            EntityLinkAuthoringUtility.TryGetKey(this.routeLink, out var linkKey);
             context.Baker.DependsOn(this.definition);
 
             context.Baker.AddComponent(clipEntity, new VFXForgeClipData
             {
                 Key = this.definition,
-                RouteTo = this.routeTo,
-                RouteLinkKey = linkKey,
+                Route = EntityLinkAuthoringUtility.BakeRef(context.Baker, this.routeLink, this.routeTo),
             });
             context.Baker.AddComponent(clipEntity, new VFXForgeRuntimeState { Tracked = TrackedEntity.Null });
 

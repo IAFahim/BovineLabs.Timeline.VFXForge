@@ -121,7 +121,7 @@ namespace BovineLabs.Timeline.VFXForge
                 }
 
                 if (!VFXForgeTargetResolver.TryResolveLinkedTarget(
-                        data.RouteTo, data.RouteLinkKey, binding.Value,
+                        data.Route, binding.Value,
                         this.TargetsLookup, this.LinkSources, this.Links, out var target)
                     || target == Entity.Null)
                 {

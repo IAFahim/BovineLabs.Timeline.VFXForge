@@ -1,6 +1,7 @@
 namespace BovineLabs.Timeline.VFXForge.Data
 {
     using BovineLabs.Reaction.Data.Core;
+    using BovineLabs.Timeline.EntityLinks.Data;
     using FireAlt.VFXForge.Data;
     using Unity.Entities;
 
@@ -12,11 +13,9 @@ namespace BovineLabs.Timeline.VFXForge.Data
         /// <summary>The Fire Alt <c>VFXDefinition</c>'s stable key (resolved from the asset at bake).</summary>
         public VFXKey Key;
 
-        /// <summary>Base target relative to the track's bound entity (Owner / Source / Target / Self).</summary>
-        public Target RouteTo;
-
-        /// <summary>Optional EntityLink re-route key (0 = none); re-points the resolved target to a linked entity.</summary>
-        public ushort RouteLinkKey;
+        /// <summary>Resolves the entity the VFX plays at: a base <see cref="Target"/> slot relative to the track's
+        /// bound entity, optionally re-routed through an EntityLink to a linked entity.</summary>
+        public EntityLinkRef Route;
     }
 
     /// <summary>
