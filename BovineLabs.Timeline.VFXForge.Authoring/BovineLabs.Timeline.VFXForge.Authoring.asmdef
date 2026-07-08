@@ -1,34 +1,35 @@
 {
-  "name": "BovineLabs.Timeline.VFXForge.Authoring",
-  "rootNamespace": "",
-  "references": [
-    "BovineLabs.Core",
-    "BovineLabs.Core.Authoring",
-    "BovineLabs.Timeline.VFXForge.Data",
-    "Unity.Burst",
-    "Unity.Collections",
-    "Unity.Entities",
-    "Unity.Entities.Hybrid",
-    "Unity.Mathematics",
-    "Unity.Transforms",
-    "Unity.Timeline",
-    "BovineLabs.Reaction.Data",
-    "BovineLabs.Reaction.Authoring",
-    "BovineLabs.Timeline.Authoring",
-    "BovineLabs.Timeline.EntityLinks.Authoring",
-    "BovineLabs.Timeline.EntityLinks.Data",
-    "FireAlt.VFXForge.Data"
-  ],
-  "optionalUnityReferences": [],
-  "includePlatforms": [],
-  "excludePlatforms": [],
-  "allowUnsafeCode": true,
-  "overrideReferences": false,
-  "precompiledReferences": [],
-  "autoReferenced": false,
-  "defineConstraints": [
-    "UNITY_EDITOR"
-  ],
-  "versionDefines": [],
-  "noEngineReferences": false
+    "name": "BovineLabs.Timeline.VFXForge.Authoring",
+    "rootNamespace": "",
+    "references": [
+        "BovineLabs.Core",
+        "BovineLabs.Core.Authoring",
+        "BovineLabs.Timeline.VFXForge.Data",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "Unity.Timeline",
+        "BovineLabs.Reaction.Data",
+        "BovineLabs.Reaction.Authoring",
+        "BovineLabs.Timeline.Authoring",
+        "BovineLabs.Timeline.EntityLinks.Authoring",
+        "BovineLabs.Timeline.EntityLinks.Data",
+        "FireAlt.VFXForge.Data",
+        "BovineLabs.Nerve"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_EDITOR"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
 }

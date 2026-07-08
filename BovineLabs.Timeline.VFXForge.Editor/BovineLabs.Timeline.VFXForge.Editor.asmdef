@@ -6,7 +6,8 @@
         "BovineLabs.Timeline.Authoring",
         "FireAlt.VFXForge.Data",
         "Unity.Timeline",
-        "Unity.Timeline.Editor"
+        "Unity.Timeline.Editor",
+        "BovineLabs.Nerve"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [

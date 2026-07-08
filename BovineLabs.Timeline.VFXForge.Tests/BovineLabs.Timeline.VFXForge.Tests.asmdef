@@ -21,7 +21,8 @@
         "FireAlt.VFXForge.Data",
         "FireAlt.Core",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "BovineLabs.Nerve"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
