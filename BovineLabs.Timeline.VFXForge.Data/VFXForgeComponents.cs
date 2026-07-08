@@ -26,6 +26,13 @@ namespace BovineLabs.Timeline.VFXForge.Data
     public struct VFXForgeRuntimeState : IComponentData
     {
         public TrackedEntity Tracked;
+
+        /// <summary>
+        /// One-shot diagnostic latch: one bit per silent no-op cause in <c>VFXForgeSpawnSystem.SpawnJob</c> (missing
+        /// track binding, unregistered key, route resolution failure, resolved target null) so each cause warns
+        /// exactly once per clip entity instead of every frame it is misconfigured.
+        /// </summary>
+        public byte WarnedMask;
     }
 
     /// <summary>

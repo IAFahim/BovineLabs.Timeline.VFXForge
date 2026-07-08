@@ -23,44 +23,33 @@ namespace BovineLabs.Timeline.VFXForge.Authoring
         [Tooltip("The Fire Alt VFX to play. Must be a PERSISTENT VFXDefinition: it is spawned on the clip start and killed on the clip end. A HybridVisualEffect for this definition must exist in the loaded scene/subscene so its VFXKey is registered.")]
         public VFXDefinition definition;
 
-        [Tooltip("Which entity the VFX plays at / follows, relative to the track's bound entity: Owner, Source, Target, or Self (the bound entity itself).")]
+        [Tooltip("Which entity the VFX plays at / follows, relative to the track's bound entity. Matches the Reaction Target enum: " +
+            "None (no target), Target, Owner, Source, Self (the bound entity itself), or Custom. Default is Self.")]
         public Target routeTo = Target.Self;
 
         /// <inheritdoc/>
         public override double duration => 1;
 
-        // Spawn-on-start / kill-on-end with replay on re-entry. Blending only (no Looping: a baked spawn is edge-driven,
-        // a looping clip would not re-fire it).
-        public ClipCaps clipCaps => ClipCaps.Blending;
+        // Spawn-on-start / kill-on-end with replay on re-entry. No Blending (the runtime is a binary ClipActive
+        // enable/disable — clip weight is never read, so a crossfade region would be a lie) and no Looping (a baked
+        // spawn is edge-driven; a looping clip would not re-fire it).
+        public ClipCaps clipCaps => ClipCaps.None;
 
         /// <inheritdoc/>
         public override void Bake(Entity clipEntity, BakingContext context)
         {
+            // Single source of truth: the same check the editor ClipEditor surfaces as a badge. Warn but continue
+            // baking, EXCEPT for the null-definition case which has nothing to bake.
+            var error = VFXForgeClipValidation.Validate(this);
+            if (error != null)
+            {
+                Debug.LogWarning($"VFXForgeClip '{this.name}': {error}", this);
+            }
+
             if (this.definition == null)
             {
-                Debug.LogWarning($"VFXForgeClip '{this.name}' has no VFXDefinition assigned; it will play nothing.", this);
                 base.Bake(clipEntity, context);
                 return;
-            }
-
-            if (this.definition.vfxType != VFXType.Persistent)
-            {
-                Debug.LogWarning(
-                    $"VFXForgeClip '{this.name}' references VFXDefinition '{this.definition.name}' which is " +
-                    $"'{this.definition.vfxType}', but this track spawns and kills a Persistent instance. Set the " +
-                    $"definition's vfxType to Persistent or the clip will play nothing.",
-                    this);
-            }
-
-            // Key 0 = the FireAlt UID postprocessor hasn't stamped this definition yet; ContainsPersistent(0) is
-            // false at runtime so the clip silently plays nothing. Tell the designer to re-import/save the definition.
-            if (((FireAlt.VFXForge.Data.VFXKey)this.definition).Value == 0)
-            {
-                Debug.LogWarning(
-                    $"VFXForgeClip '{this.name}' references VFXDefinition '{this.definition.name}' whose VFXKey is 0 " +
-                    "(unregistered); it will play nothing at runtime. Re-import/save the definition so the FireAlt UID " +
-                    "postprocessor assigns it a key.",
-                    this);
             }
 
             context.Baker.DependsOn(this.definition);

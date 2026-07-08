@@ -1,0 +1,23 @@
+{
+    "name": "BovineLabs.Timeline.VFXForge.Editor",
+    "rootNamespace": "",
+    "references": [
+        "BovineLabs.Timeline.VFXForge.Authoring",
+        "BovineLabs.Timeline.Authoring",
+        "FireAlt.VFXForge.Data",
+        "Unity.Timeline",
+        "Unity.Timeline.Editor"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

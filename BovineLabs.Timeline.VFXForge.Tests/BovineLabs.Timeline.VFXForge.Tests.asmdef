@@ -1,0 +1,39 @@
+{
+    "name": "BovineLabs.Timeline.VFXForge.Tests",
+    "rootNamespace": "BovineLabs.Timeline.VFXForge.Tests",
+    "references": [
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "BovineLabs.Core",
+        "BovineLabs.Core.Extensions",
+        "BovineLabs.Timeline",
+        "BovineLabs.Timeline.VFXForge",
+        "BovineLabs.Timeline.VFXForge.Data",
+        "BovineLabs.Timeline.Data",
+        "BovineLabs.Timeline.EntityLinks",
+        "BovineLabs.Timeline.EntityLinks.Data",
+        "BovineLabs.Reaction.Data",
+        "FireAlt.VFXForge",
+        "FireAlt.VFXForge.Data",
+        "FireAlt.Core",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

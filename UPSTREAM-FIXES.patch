@@ -1,0 +1,324 @@
+# UPSTREAM-FIXES.patch
+#
+# Upstream bug fixes for the FireAlt.VFXForge package (com.firealt.vfx-forge,
+# github IAFahim/com.firealt.vfx-forge). These were authored against the
+# resolved package cache and MUST be re-applied to the real com.firealt.vfx-forge
+# repository (PackageCache edits are wiped on package re-resolve).
+#
+# Apply from the com.firealt.vfx-forge repo root with:
+#     git apply UPSTREAM-FIXES.patch
+# (paths are repo-relative, a/b prefixed; use -p1). If applying against a working
+# copy that has drifted, `git apply --3way` or `patch -p1 < UPSTREAM-FIXES.patch`.
+#
+# ---------------------------------------------------------------------------
+# FIXES IN THIS PATCH (maps to BovineLabs.Timeline.VFXForge/TODO.md items)
+# ---------------------------------------------------------------------------
+#
+# [1] C3 - InitializeVFXSystem duplicate-key error loop.
+#     File: FireAlt.VFXForge/Systems/InitializeVFXSystem.cs
+#     On a failed TryAddVFXEntry (e.g. duplicate VFXKey), still disable
+#     HybridVisualEffectData (initializeRW = false) so the entity is not
+#     re-processed every frame. RegisteredVFX.Key is left at VFXKey.Null, which
+#     CleanupVFXSystem already skips (verified: `if (Key.Equals(VFXKey.Null)) continue;`).
+#     Result: the error logs once, not per-frame.
+#
+# [2] H8 - Burst violation: Application.isPlaying inside [BurstCompile] SyncVFXSystem.OnUpdate/AddVFX.
+#     Files: FireAlt.VFXForge/Systems/SyncVFXSystem.cs
+#            FireAlt.VFXForge/Systems/SyncVFXSystem.Managed.cs
+#     Added a `SharedStatic<bool> IsPlaying` (IsPlayingContext) alongside the
+#     existing SharedStatic pattern. It is written ONLY from managed code - seeded
+#     in OnCreate (SyncVFXSystem.Managed.cs, not [BurstCompile]) and refreshed at
+#     the top of the managed UploadDataPacked - never from the struct static ctor
+#     (which may run under Burst). The Burst OnUpdate / AddVFX now read
+#     Burst.IsPlaying.Data instead of Application.isPlaying. UploadDataPacked runs
+#     at the END of OnUpdate, so OnUpdate reads the prior frame's value (or the
+#     OnCreate seed on frame 0); a one-frame-stale flag across the play-mode
+#     transition is acceptable. Managed partial code keeps reading
+#     Application.isPlaying directly (fine there).
+#
+# [3] Medium - HasRequiredProperties log-once.
+#     File: FireAlt.VFXForge/Singletons/VFXGraphicsBuffersSingleton.cs
+#     Added `private bool _loggedFailure;` on VFXGraphicsBuffers. The try/catch now
+#     logs the exception only on the first failure and still returns false every
+#     time; the flag resets on a successful validation. The checks themselves run
+#     every call, so the return value stays accurate - only the per-frame logging
+#     is suppressed.
+#
+# [4] Medium - SyncVFXSystem.OnDestroy teardown guards.
+#     File: FireAlt.VFXForge/Systems/SyncVFXSystem.cs
+#     OnDestroy used GetSingleton for both singletons, which throws if the
+#     singleton entities were destroyed first during world teardown (leaking the
+#     Persistent-allocator containers). Now uses ManagedAPI.TryGetSingleton /
+#     TryGetSingleton guards, disposes only what exists, and always disposes
+#     _stateChanges (guarded by IsCreated).
+#
+# [5] Low - Version-wrap skip-0.
+#     File: FireAlt.VFXForge/Systems/SyncVFXSystem.cs
+#     After `Burst.VFXSystemVersion.Data++`, skip a value that masks to 0 in the
+#     30-bit version field: `if ((Data & 0x3FFFFFFF) == 0) Data++;`. Mask verified
+#     against PackedData.cs (VALUE_BITS = 30, SYSTEM_VERSION_MASK = 0x3FFFFFFF).
+#     SystemVersion == 0 is TryResolve's dead/Null sentinel, so a valid handle must
+#     never carry it after wrap.
+#
+# [6] Medium - VFXTransformSystem fill/consume assertions.
+#     File: FireAlt.VFXForge/Systems/VFXTransformSystem.cs
+#     The main-thread fill loop always appends SpawnEntityIdRequests to
+#     EntityIdFrameData, but FetchGameObjectTransformJob consumes them only when
+#     entry.HasPendingRequests, sharing running index `i` with TrackedEntityIds.
+#     Added two Burst-compatible Unity.Assertions.Assert guards:
+#       - at fill time: HasPendingRequests || SpawnEntityIdRequests.Length == 0
+#       - at end of FetchGameObjectTransformJob.Execute: i == EntityIdFrameData.Length
+#         (trivially holds 0 == 0 when no EntityId work existed).
+#
+# [7] C2 defense-in-depth - MemClear stale data slot. CHOKE POINT: the private
+#     base PersistentVFXEntry.Spawn(TrackedEntity, float), clearing DeferredDataBuffer.
+#     File: FireAlt.VFXForge/Entry/PersistentVFXEntry.cs
+#     REASONING for the single choke point (confirmed by reading
+#     ResolvePersistentJob.SpawnPersistentRequests in SyncVFXSystem.cs):
+#       - DeferredDataBuffer.IsCreated  <=>  DataSizeInBytes > 0  <=>  DataBuffer.IsCreated
+#         (all three are allocated together in InitializeVFXSystem only when
+#          entry.DataSizeInBytes > 0).
+#       - When DeferredDataBuffer.IsCreated, resolution ALWAYS routes through
+#         internalApi.SpawnPersistentUnsafe(ptr = DeferredDataBuffer slot), which
+#         MemCpys that slot into DataBuffer. The non-Unsafe InternalAPI.SpawnPersistent
+#         is reached ONLY in the else-branch, i.e. when DeferredDataBuffer is NOT
+#         created (DataSizeInBytes == 0) - so it has no data buffer to clear and a
+#         MemClear there (the TODO's option a) would be dead code.
+#       - Therefore the one place that fixes BOTH the direct-DataBuffer staleness and
+#         the deferred staleness is clearing the DeferredDataBuffer slot in the
+#         private base Spawn. Data-less spawns (the timeline VFXForgeClip's
+#         Spawn(target, 0f)) never write it, so the slot retains a previous
+#         occupant's bytes that would flow DeferredDataBuffer -> DataBuffer -> GPU.
+#         The typed (Spawn<T>) and unsafe (SpawnUnsafe) overloads call this private
+#         Spawn FIRST and then overwrite the slot with real data, so clearing then
+#         overwriting is correct and cheap. Each spawn owns a unique IndexInData via
+#         Interlocked NextIndex, so the per-slot MemClear is race-free under the
+#         parallel SpawnJob.
+#     Uses the file's existing unsafe pointer idiom
+#     ((byte*)DeferredDataBuffer.GetUnsafePtr() + IndexInData * DataSizeInBytes) with
+#     UnsafeUtility.MemClear; the private Spawn is marked `unsafe`.
+#
+# ---------------------------------------------------------------------------
+--- a/FireAlt.VFXForge/Systems/InitializeVFXSystem.cs
++++ b/FireAlt.VFXForge/Systems/InitializeVFXSystem.cs
+@@ -25,6 +25,13 @@
+                     registeredVFX.ValueRW.Key = key;
+                     initializeRW.ValueRW = false;
+                 }
++                else
++                {
++                    // Registration failed (e.g. duplicate VFXKey). Still stop processing this object so the
++                    // error logs once instead of every InitializeVFXSystem update - the collision won't resolve
++                    // itself on retry. RegisteredVFX.Key is left at VFXKey.Null, which CleanupVFXSystem tolerates.
++                    initializeRW.ValueRW = false;
++                }
+             }
+         }
+         
+--- a/FireAlt.VFXForge/Systems/SyncVFXSystem.cs
++++ b/FireAlt.VFXForge/Systems/SyncVFXSystem.cs
+@@ -30,13 +30,20 @@
+                 SharedStatic<BurstInterop>.GetOrCreate<SyncVFXSystem, GetVFXActivityStatusContext>();
+             public static readonly SharedStatic<BurstInterop> UploadData = 
+                 SharedStatic<BurstInterop>.GetOrCreate<SyncVFXSystem, UploadDataContext>();
+-            public static readonly SharedStatic<uint> VFXSystemVersion = 
++            public static readonly SharedStatic<uint> VFXSystemVersion =
+                 SharedStatic<uint>.GetOrCreate<SyncVFXSystem, SystemVersionContext>();
++            // Cached UnityEngine.Application.isPlaying so [BurstCompile] OnUpdate/AddVFX never touch the
++            // managed static directly (which would silently drop the method to a managed fallback). Written
++            // from managed code only - OnCreate and the top of UploadDataPacked - never from the struct's
++            // static ctor, which may itself run under Burst.
++            public static readonly SharedStatic<bool> IsPlaying =
++                SharedStatic<bool>.GetOrCreate<SyncVFXSystem, IsPlayingContext>();
+         }
+-        
++
+         private struct GetVFXActivityStatusContext {}
+         private struct UploadDataContext {}
+         private struct SystemVersionContext {}
++        private struct IsPlayingContext {}
+         
+         public static uint SystemVersion => Burst.VFXSystemVersion.Data;
+         
+@@ -49,10 +56,23 @@
+ 
+         public void OnDestroy(ref SystemState state)
+         {
++            // During world teardown the singleton entities may already have been destroyed (dispose order,
++            // DestroyAllSystemsAndLogException after an entity purge, or a test tearing entities first). Guard
++            // every access so we dispose what still exists and never throw - a throw here would skip the
++            // remaining disposals and leak the Persistent-allocator containers.
+             // First dispose the graphics buffers, then clear VFX data + reinit VFX Graphs to not have a warning
+-            SystemAPI.ManagedAPI.GetSingleton<VFXGraphicsBuffersSingleton>().Dispose();
+-            SystemAPI.GetSingleton<VFXSingleton>().Dispose();
+-            _stateChanges.Dispose();
++            if (SystemAPI.ManagedAPI.TryGetSingleton<VFXGraphicsBuffersSingleton>(out var graphicsBuffers))
++            {
++                graphicsBuffers.Dispose();
++            }
++            if (SystemAPI.TryGetSingleton<VFXSingleton>(out var vfxSingleton))
++            {
++                vfxSingleton.Dispose();
++            }
++            if (_stateChanges.IsCreated)
++            {
++                _stateChanges.Dispose();
++            }
+         }
+         
+         [BurstCompile]
+@@ -62,10 +82,16 @@
+             
+             ref var vfxSingleton = ref SystemAPI.GetSingletonRW<VFXSingleton>().ValueRW;
+             Burst.VFXSystemVersion.Data++;
++            // Skip a version that masks to 0 in PackedData's 30-bit version field: SystemVersion == 0 is the
++            // sentinel that TryResolve treats as a dead/Null handle, so a valid handle must never carry it.
++            if ((Burst.VFXSystemVersion.Data & 0x3FFFFFFF) == 0)
++            {
++                Burst.VFXSystemVersion.Data++;
++            }
+ 
+             var deltaTime = SystemAPI.Time.DeltaTime;
+-            
+-            if (Application.isPlaying)
++
++            if (Burst.IsPlaying.Data)
+             {
+                 using var toRemove = NativeListPool<AliveVFX>.Rent();
+                 RemoveTimedOutVFX(vfxSingleton.InstantAliveVFX, deltaTime, toRemove.List);
+@@ -137,7 +163,7 @@
+         {
+             foreach (var pair in entryMap)
+             {
+-                if ((pair.Value.HasPendingRequests || !Application.isPlaying) && !aliveVfxMap.ContainsKey(pair.Key))
++                if ((pair.Value.HasPendingRequests || !Burst.IsPlaying.Data) && !aliveVfxMap.ContainsKey(pair.Key))
+                 {
+                     _stateChanges.Add(new VFXStateChange
+                     {
+--- a/FireAlt.VFXForge/Systems/SyncVFXSystem.Managed.cs
++++ b/FireAlt.VFXForge/Systems/SyncVFXSystem.Managed.cs
+@@ -34,6 +34,12 @@
+             ref var managedArgs = ref BurstInterop.ArgumentsFromPtr<BurstManagedPair<VFXSingleton, ManagedArgs>>(argumentsPtr, argumentsSize);
+             ref var vfxSingleton = ref managedArgs.First;
+             ref var args = ref managedArgs.Second;
++
++            // Refresh the cached play-mode flag from managed code so the [BurstCompile] OnUpdate/AddVFX can read
++            // it without touching Application.isPlaying directly. UploadDataPacked runs at the END of OnUpdate,
++            // so OnUpdate sees the value from the previous frame (or OnCreate on the first frame); a one-frame
++            // stale flag across the play-mode transition is acceptable.
++            Burst.IsPlaying.Data = Application.isPlaying;
+             
+             var graphicsBuffersSingleton = args.ManagedSingletonQuery.GetSingleton<VFXGraphicsBuffersSingleton>();
+             
+@@ -164,6 +170,9 @@
+         {
+             const int vfxCapacity = 32;
+             
++            // Seed the cached play-mode flag before the first (Burst) OnUpdate reads it.
++            Burst.IsPlaying.Data = Application.isPlaying;
++
+             state.EntityManager.CreateSingleton(new VFXSingleton(vfxCapacity));
+             var entity = state.EntityManager.CreateEntity(typeof(VFXGraphicsBuffersSingleton));
+             state.EntityManager.AddComponentObject(entity, new VFXGraphicsBuffersSingleton
+--- a/FireAlt.VFXForge/Singletons/VFXGraphicsBuffersSingleton.cs
++++ b/FireAlt.VFXForge/Singletons/VFXGraphicsBuffersSingleton.cs
+@@ -36,6 +36,10 @@
+         protected readonly int DataGpuSize;
+         protected readonly int ArrayDataGpuSize;
+ 
++        // Latches after the first failed validation so a misconfigured graph logs its exception once instead of
++        // every frame (UploadDataPacked calls HasRequiredProperties per alive entry per frame). Reset on success.
++        private bool _loggedFailure;
++
+         protected VFXGraphicsBuffers(VisualEffect target, VFXDefinition definition)
+         {
+             Target = target;
+@@ -108,9 +112,16 @@
+             }
+             catch (Exception e)
+             {
+-                Debug.LogException(e, Target);
++                // Log once per misconfigured graph, not once per frame. The checks still run every call so the
++                // return value stays accurate; only the logging is suppressed after the first failure.
++                if (!_loggedFailure)
++                {
++                    _loggedFailure = true;
++                    Debug.LogException(e, Target);
++                }
+                 return false;
+             }
++            _loggedFailure = false;
+             return true;
+         }
+         
+--- a/FireAlt.VFXForge/Systems/VFXTransformSystem.cs
++++ b/FireAlt.VFXForge/Systems/VFXTransformSystem.cs
+@@ -55,7 +55,13 @@
+                 {
+                     entityIdPresent = true;
+                 }
+-                
++
++                // FetchGameObjectTransformJob consumes SpawnEntityIdRequests only when HasPendingRequests, but
++                // the fill loop below always appends one EntityIdFrameData element per request. A non-empty
++                // request list must therefore imply HasPendingRequests, else consume would skip these elements
++                // and desync the shared running index against TrackedEntityIds (silent wrong-position VFX).
++                Unity.Assertions.Assert.IsTrue(entry.HasPendingRequests || entry.SpawnEntityIdRequests.Length == 0);
++
+                 foreach (var deferredKey in entry.SpawnEntityIdRequests)
+                 {
+                     Burst.IsEnabled.Data.InvokeOut(deferredKey.EntityId, out EntityIdState entityIdState);
+@@ -158,6 +164,12 @@
+                     SetTransformData(ref data, ref entityIdData);
+                     i++;
+                 }
++
++                // The fill loop in OnUpdate appended exactly one EntityIdFrameData element per consumed
++                // SpawnEntityIdRequest (only when HasPendingRequests) plus one per TrackedEntityId. Having walked
++                // both here, i must equal that length; a mismatch means the fill/consume gating drifted. Trivially
++                // holds (0 == 0) for entries with no EntityId work.
++                Unity.Assertions.Assert.IsTrue(i == entry.EntityIdFrameData.Length);
+             }
+ 
+             private void SetTransformData(ref VFXTransform data, ref EntityIdData entityIdData)
+--- a/FireAlt.VFXForge/Entry/PersistentVFXEntry.cs
++++ b/FireAlt.VFXForge/Entry/PersistentVFXEntry.cs
+@@ -140,14 +140,14 @@
+             return Spawn(TrackedEntity.FromEntityId(gameObjectToTrack), trackingDuration);
+         }
+ 
+-        private TrackedEntity Spawn(TrackedEntity trackedEntity, float trackingDuration)
++        private unsafe TrackedEntity Spawn(TrackedEntity trackedEntity, float trackingDuration)
+         {
+             Assert.IsTrue(trackingDuration >= 0f);
+             var nextIndex = Interlocked.Increment(ref NextIndex);
+-            
+-            if (nextIndex > Capacity - UsedCapacity) 
++
++            if (nextIndex > Capacity - UsedCapacity)
+                 return trackedEntity;
+-            
++
+             trackedEntity.IndexInData = nextIndex - 1;
+             trackedEntity.PackedData.SetIsDeferred(true);
+             trackedEntity.PackedData.SetSystemVersion(SyncVFXSystem.SystemVersion);
+@@ -157,6 +157,19 @@
+             transformData.TrackingDuration = trackingDuration;
+             DeferredTransformBuffer[trackedEntity.IndexInData] = transformData;
+ 
++            // Clear stale bytes left by a previous occupant of this deferred slot. Data-less spawns (e.g. the
++            // timeline VFXForgeClip's Spawn(target, 0f)) never write DeferredDataBuffer, yet resolution ALWAYS
++            // copies this slot into DataBuffer via SpawnPersistentUnsafe whenever DeferredDataBuffer.IsCreated
++            // (see SyncVFXSystem.ResolvePersistentJob.SpawnPersistentRequests) - so without this clear the
++            // previous instance's data would be uploaded to the GPU. The typed and unsafe Spawn overloads
++            // overwrite this slot with real data immediately after this call, so the clear is cheap and correct.
++            // Each spawn owns a unique IndexInData (Interlocked NextIndex), so this per-slot clear is race-free.
++            if (DeferredDataBuffer.IsCreated)
++            {
++                var slot = (byte*)DeferredDataBuffer.GetUnsafePtr() + trackedEntity.IndexInData * DataSizeInBytes;
++                UnsafeUtility.MemClear(slot, DataSizeInBytes);
++            }
++
+             if (trackedEntity.IsEntityId)
+             {
+                 SpawnEntityIdRequests.GetUnsafeList(JobsUtility.ThreadIndex).Add(trackedEntity);
